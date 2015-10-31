@@ -14,6 +14,7 @@ func get(i int) {
 		fmt.Printf("%d\n%v\n", i, err)
 	}
 }
+
 func main() {
 	for i := 0; i <= 50000; i++ {
 		if i%50 == 0 {
