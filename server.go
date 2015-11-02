@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
-	//"io/ioutil"
+	//	"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
@@ -12,8 +12,28 @@ import (
 func initHttp() {
 	http.HandleFunc("/recv", recv)
 	http.HandleFunc("/push", push)
+	http.HandleFunc("/", test)
+	fmt.Printf("starting server...\n")
 	http.ListenAndServe(":1234", nil)
-	fmt.Printf("starting server...")
+
+	//httpServeMux := http.NewServeMux()
+	//httpServeMux.HandleFunc("/recv", recv)
+	//httpServeMux.HandleFunc("/push", push)
+	//server := &http.Server{
+	//	Addr:    ":1234",
+	//	Handler: httpServeMux,
+	//}
+	//server.SetKeepAlivesEnabled(true)
+	//server.ListenAndServe()
+}
+
+func test(w http.ResponseWriter, r *http.Request) {
+	cn, _ := w.(http.CloseNotifier)
+	go closeHandler(1, cn)
+}
+
+func closeHandler(userId int64, cn http.CloseNotifier) {
+	<-cn.CloseNotify()
 }
 
 func recv(w http.ResponseWriter, r *http.Request) {
@@ -25,11 +45,30 @@ func recv(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("parse userId is wrong\n")
 		return
 	}
-	fmt.Printf("%d\n", iuserId)
+	fmt.Printf("recv=%d\n", iuserId)
+
 	hj, _ := w.(http.Hijacker)
 	conn, rwr, _ := hj.Hijack()
 	us.conns[iuserId] = conn
+
 	go recvMsg(rwr, iuserId)
+	go read(rwr, iuserId)
+}
+
+/* read client data, if client closed,then close server conn
+ *
+ */
+func read(rwr *bufio.ReadWriter, userId int64) {
+	var p byte = '\n'
+	var err error
+	if _, err = rwr.ReadString(p); err != nil {
+		conn := us.conns[userId]
+		if closeErr := conn.Close(); closeErr != nil {
+			println("close error:", userId)
+		}
+		delete(us.conns, userId)
+		println("close:", userId)
+	}
 }
 
 func recvMsg(rwr *bufio.ReadWriter, userId int64) {
@@ -61,7 +100,7 @@ func push(w http.ResponseWriter, r *http.Request) {
 	//bodyBytes, _ := ioutil.ReadAll(r.Body)
 	//fmt.Printf("%d\n", len(string(bodyBytes)))
 	if _, ok := us.chs[iuserId]; !ok {
-		var ta = make(chan Talk, 10)
+		var ta = make(chan Talk, 1)
 		var ch Channel
 		ch.ch = ta
 		us.chs[iuserId] = ch
