@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
-	//	"io/ioutil"
+	"github.com/garyburd/redigo/redis"
 	"net"
 	"net/http"
 	"strconv"
@@ -15,16 +15,51 @@ func initHttp() {
 	http.HandleFunc("/", test)
 	fmt.Printf("starting server...\n")
 	http.ListenAndServe(":1234", nil)
+}
 
-	//httpServeMux := http.NewServeMux()
-	//httpServeMux.HandleFunc("/recv", recv)
-	//httpServeMux.HandleFunc("/push", push)
-	//server := &http.Server{
-	//	Addr:    ":1234",
-	//	Handler: httpServeMux,
-	//}
-	//server.SetKeepAlivesEnabled(true)
-	//server.ListenAndServe()
+// create pool
+func newPool() *redis.Pool {
+	return &redis.Pool{
+		MaxIdle:   80,
+		MaxActive: 12000, // max number of connections
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("tcp", "123.57.72.193:6379", redis.DialPassword("moodecn2015"))
+			if err != nil {
+				panic(err.Error())
+			}
+			return c, err
+		},
+	}
+}
+
+func set(userId int64) bool {
+	c := pool.Get()
+	defer c.Close()
+	key := fmt.Sprintf("comet:%d", userId)
+	ok, err := redis.String(c.Do("SET", key, "10.171.102.146:1234"))
+	if ok != "OK" || err != nil {
+		return false
+	}
+	return true
+}
+
+func get(userId int64) (string, error) {
+	c := pool.Get()
+	defer c.Close()
+	key := fmt.Sprintf("comet:%d", userId)
+	res, err := redis.String(c.Do("GET", key))
+	return res, err
+}
+
+func del(userId int64) bool {
+	c := pool.Get()
+	defer c.Close()
+	key := fmt.Sprintf("comet:%d", userId)
+	ok, err := redis.String(c.Do("DELETE", key))
+	if ok != "OK" || err != nil {
+		return false
+	}
+	return true
 }
 
 func test(w http.ResponseWriter, r *http.Request) {
@@ -67,11 +102,31 @@ func read(rwr *bufio.ReadWriter, userId int64) {
 			println("close error:", userId)
 		}
 		delete(us.conns, userId)
+		del(userId)
 		println("close:", userId)
 	}
 }
 
 func recvMsg(rwr *bufio.ReadWriter, userId int64) {
+	var (
+		ok       bool
+		conn     net.Conn
+		closeErr error
+	)
+
+	//close old connection and channel
+	if _, ok = us.chs[userId]; ok {
+		conn = us.conns[userId]
+		if closeErr = conn.Close(); closeErr != nil {
+			println("close old connection error:", userId)
+		}
+	}
+
+	set(userId)
+
+	res, _ := get(userId)
+	fmt.Printf("%v\n", res)
+
 	var ta = make(chan Talk, 1)
 	var ch Channel
 	ch.ch = ta
@@ -87,7 +142,6 @@ func recvMsg(rwr *bufio.ReadWriter, userId int64) {
 
 func push(w http.ResponseWriter, r *http.Request) {
 	var iuserId int64
-	//var bodyBytes []byte
 	var err error
 	params := r.URL.Query()
 	suserId := params.Get("userId")
@@ -97,8 +151,6 @@ func push(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Printf("%d\t%s\n", iuserId, smsg)
-	//bodyBytes, _ := ioutil.ReadAll(r.Body)
-	//fmt.Printf("%d\n", len(string(bodyBytes)))
 	if _, ok := us.chs[iuserId]; !ok {
 		var ta = make(chan Talk, 1)
 		var ch Channel
@@ -107,15 +159,13 @@ func push(w http.ResponseWriter, r *http.Request) {
 	}
 	talk := Talk{iuserId, smsg}
 	us.chs[iuserId].ch <- talk
-	//hj, _ := w.(http.Hijacker)
-	//conn, _, _ := hj.Hijack()
-	//conn.Close()
 }
 
 type Users struct {
 	conns map[int64]net.Conn
 	chs   map[int64]Channel
 }
+
 type Channel struct {
 	ch chan Talk
 }
@@ -126,6 +176,9 @@ type Talk struct {
 }
 
 var us *Users
+
+// create redis connection pool
+var pool = newPool()
 
 func main() {
 	us = new(Users)
