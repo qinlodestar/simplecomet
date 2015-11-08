@@ -36,7 +36,7 @@ func set(userId int64) bool {
 	c := pool.Get()
 	defer c.Close()
 	key := fmt.Sprintf("comet:%d", userId)
-	ok, err := redis.String(c.Do("SET", key, "10.171.102.146:1234"))
+	ok, err := redis.String(c.Do("SET", key, "127.0.0.1:1234"))
 	if ok != "OK" || err != nil {
 		return false
 	}
