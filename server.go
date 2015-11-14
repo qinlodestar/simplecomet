@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	log "code.google.com/p/log4go"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"net"
@@ -13,7 +14,7 @@ func initHttp() {
 	http.HandleFunc("/recv", recv)
 	http.HandleFunc("/push", push)
 	http.HandleFunc("/", test)
-	fmt.Printf("starting server...\n")
+	log.Debug("starting server...")
 	http.ListenAndServe(":1234", nil)
 }
 
@@ -36,7 +37,7 @@ func set(userId int64) bool {
 	c := pool.Get()
 	defer c.Close()
 	key := fmt.Sprintf("comet:%d", userId)
-	ok, err := redis.String(c.Do("SET", key, "127.0.0.1:1234"))
+	ok, err := redis.String(c.Do("SETEX", key, 86400, "127.0.0.1:1234"))
 	if ok != "OK" || err != nil {
 		return false
 	}
@@ -77,10 +78,10 @@ func recv(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 	suserId := params.Get("userId")
 	if iuserId, err = strconv.ParseInt(suserId, 10, 64); err != nil {
-		fmt.Printf("parse userId is wrong\n")
+		log.Debug("parse userId is wrong")
 		return
 	}
-	fmt.Printf("recv=%d\n", iuserId)
+	log.Debug("recv=%d", iuserId)
 
 	hj, _ := w.(http.Hijacker)
 	conn, rwr, _ := hj.Hijack()
@@ -96,14 +97,15 @@ func recv(w http.ResponseWriter, r *http.Request) {
 func read(rwr *bufio.ReadWriter, userId int64) {
 	var p byte = '\n'
 	var err error
+	status := "Ok"
 	if _, err = rwr.ReadString(p); err != nil {
 		conn := us.conns[userId]
 		if closeErr := conn.Close(); closeErr != nil {
-			println("close error:", userId)
+			status = "Fail"
 		}
 		delete(us.conns, userId)
 		del(userId)
-		println("close:", userId)
+		log.Debug("close%s:\t%d", status, userId)
 	}
 }
 
@@ -125,7 +127,7 @@ func recvMsg(rwr *bufio.ReadWriter, userId int64) {
 	set(userId)
 
 	res, _ := get(userId)
-	fmt.Printf("%v\n", res)
+	log.Debug("%v", res)
 
 	var ta = make(chan Talk, 1)
 	var ch Channel
@@ -133,7 +135,7 @@ func recvMsg(rwr *bufio.ReadWriter, userId int64) {
 	us.chs[userId] = ch
 	for {
 		talk := <-us.chs[userId].ch
-		fmt.Printf("recv:%v\n", talk)
+		log.Debug("recv:%v", talk)
 		str := fmt.Sprintf("<script>alert(\"%d:%s\")</script>", talk.userId, talk.msg)
 		rwr.WriteString(str)
 		rwr.Flush()
@@ -147,10 +149,10 @@ func push(w http.ResponseWriter, r *http.Request) {
 	suserId := params.Get("userId")
 	smsg := params.Get("msg")
 	if iuserId, err = strconv.ParseInt(suserId, 10, 16); err != nil {
-		fmt.Printf("parse userId is wrong")
+		log.Debug("parse userId is wrong")
 		return
 	}
-	fmt.Printf("%d\t%s\n", iuserId, smsg)
+	log.Debug("%d\t%s", iuserId, smsg)
 	if _, ok := us.chs[iuserId]; !ok {
 		var ta = make(chan Talk, 1)
 		var ch Channel
@@ -181,6 +183,7 @@ var us *Users
 var pool = newPool()
 
 func main() {
+	log.LoadConfiguration("./server-log.xml")
 	us = new(Users)
 	us.conns = make(map[int64]net.Conn, 200000)
 	us.chs = make(map[int64]Channel, 200000)
