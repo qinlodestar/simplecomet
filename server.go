@@ -3,8 +3,9 @@ package main
 import (
 	"bufio"
 	log "code.google.com/p/log4go"
+	//	"encoding/json"
+	"flag"
 	"fmt"
-	"github.com/garyburd/redigo/redis"
 	"net"
 	"net/http"
 	"strconv"
@@ -15,52 +16,7 @@ func initHttp() {
 	http.HandleFunc("/push", push)
 	http.HandleFunc("/", test)
 	log.Debug("starting server...")
-	http.ListenAndServe(":1234", nil)
-}
-
-// create pool
-func newPool() *redis.Pool {
-	return &redis.Pool{
-		MaxIdle:   80,
-		MaxActive: 12000, // max number of connections
-		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("tcp", "127.0.0.1:6379", redis.DialPassword("moodecn2015"))
-			if err != nil {
-				panic(err.Error())
-			}
-			return c, err
-		},
-	}
-}
-
-func set(userId int64) bool {
-	c := pool.Get()
-	defer c.Close()
-	key := fmt.Sprintf("comet:%d", userId)
-	ok, err := redis.String(c.Do("SETEX", key, 86400, "127.0.0.1:1234"))
-	if ok != "OK" || err != nil {
-		return false
-	}
-	return true
-}
-
-func get(userId int64) (string, error) {
-	c := pool.Get()
-	defer c.Close()
-	key := fmt.Sprintf("comet:%d", userId)
-	res, err := redis.String(c.Do("GET", key))
-	return res, err
-}
-
-func del(userId int64) bool {
-	c := pool.Get()
-	defer c.Close()
-	key := fmt.Sprintf("comet:%d", userId)
-	ok, err := redis.String(c.Do("DELETE", key))
-	if ok != "OK" || err != nil {
-		return false
-	}
-	return true
+	http.ListenAndServe(Conf.HttpBind, nil)
 }
 
 func test(w http.ResponseWriter, r *http.Request) {
@@ -179,13 +135,16 @@ type Talk struct {
 
 var us *Users
 
-// create redis connection pool
-var pool = newPool()
-
 func main() {
-	log.LoadConfiguration("./server-log.xml")
+	flag.Parse()
+	if err := InitConfig(); err != nil {
+		panic(err)
+	}
+	//c, _ := json.Marshal(Conf)
+	//fmt.Printf("%v\n", string(c))
+	log.LoadConfiguration(Conf.Log)
 	us = new(Users)
-	us.conns = make(map[int64]net.Conn, 200000)
-	us.chs = make(map[int64]Channel, 200000)
+	us.conns = make(map[int64]net.Conn, Conf.ConnNum)
+	us.chs = make(map[int64]Channel, Conf.ConnNum)
 	initHttp()
 }
