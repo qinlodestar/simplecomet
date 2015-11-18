@@ -1,5 +1,6 @@
 # simplecomet
 ====
+simplecomet 是基于golang开发的一个简易的长连接服务器，目前支持只支持http协议，可以兼容任意浏览器
 * install 
 ```sh
 go get -u github.com/qinlodestar/simplecomet
