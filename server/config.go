@@ -33,12 +33,13 @@ func init() {
 
 type Config struct {
 	// base section
-	PidFile   string `goconf:"base:pidfile"`
-	Log       string `goconf:"base:log"`
-	ConnNum   int    `goconf:"base:connection.num"`
-	HttpBind  string `goconf:"http:bind"`
-	RedisHost string `goconf:"redis:host.bind"`
-	RedisPwd  string `goconf:"redis:password"`
+	PidFile   string   `goconf:"base:pidfile"`
+	Log       string   `goconf:"base:log"`
+	ConnNum   int      `goconf:"base:connection.num"`
+	HttpBind  string   `goconf:"http:bind"`
+	RedisHost string   `goconf:"redis:host.bind"`
+	RedisPwd  string   `goconf:"redis:password"`
+	KafkaHost []string `goconf:"kafka:bind"`
 }
 
 func NewConfig() *Config {

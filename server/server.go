@@ -4,12 +4,25 @@ import (
 	"bufio"
 	log "code.google.com/p/log4go"
 	//	"encoding/json"
-	"flag"
 	"fmt"
 	"net"
 	"net/http"
 	"strconv"
 )
+
+type Users struct {
+	conns map[int64]net.Conn
+	chs   map[int64]Channel
+}
+
+type Channel struct {
+	ch chan Talk
+}
+
+type Talk struct {
+	userId int64
+	msg    string
+}
 
 func initHttp() {
 	http.HandleFunc("/recv", recv)
@@ -80,10 +93,12 @@ func recvMsg(rwr *bufio.ReadWriter, userId int64) {
 		}
 	}
 
+	//是为了其他的服务器可以读取redis的值来判断是否在线
 	set(userId)
 
 	res, _ := get(userId)
 	log.Debug("%v", res)
+	pushKafka(userId)
 
 	var ta = make(chan Talk, 1)
 	var ch Channel
@@ -117,34 +132,4 @@ func push(w http.ResponseWriter, r *http.Request) {
 	}
 	talk := Talk{iuserId, smsg}
 	us.chs[iuserId].ch <- talk
-}
-
-type Users struct {
-	conns map[int64]net.Conn
-	chs   map[int64]Channel
-}
-
-type Channel struct {
-	ch chan Talk
-}
-
-type Talk struct {
-	userId int64
-	msg    string
-}
-
-var us *Users
-
-func main() {
-	flag.Parse()
-	if err := InitConfig(); err != nil {
-		panic(err)
-	}
-	//c, _ := json.Marshal(Conf)
-	//fmt.Printf("%v\n", string(c))
-	log.LoadConfiguration(Conf.Log)
-	us = new(Users)
-	us.conns = make(map[int64]net.Conn, Conf.ConnNum)
-	us.chs = make(map[int64]Channel, Conf.ConnNum)
-	initHttp()
 }
